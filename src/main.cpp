@@ -49,8 +49,9 @@ Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
 // semua variable disini adalah variable default untuk flash firmware apa awal isi software
 // semua variabel tentang stepper motor
 const int stepPin = 11;
-unsigned long stepPinInterval; // interval atau lama step pin mati/nyala
-const float dirPin = 12;
+const int dirPin = 12;
+const int relayPin = 13;
+int modeRelay = 0; // 0 artinya mati, 1 artinyaon ketika kekanan dan 2 artinya menyala kekanan dan kekiri (mati ketika statis)
 bool hold = false;
 
 // variabel2 yang penting untuk tampilan layar dan letak variabel
@@ -71,6 +72,9 @@ void setup()
 {
   Serial.begin(115200);
   lcd.init(); // initialize the lcd
+  pinMode(relayPin, OUTPUT);
+  digitalWrite(relayPin, LOW); // buat kondisi awalnya low/mati
+
   // Print a message to the LCD
   lcd.backlight();
   lcd.createChar(0, ikonDerajat); // ikon home
@@ -81,6 +85,21 @@ void setup()
   EEPROM.get(10, feedrate);    // feedrate
   EEPROM.get(20, akselerasi);  // akselerasi
   EEPROM.get(30, nilaiLompat); // nilai lompat
+}
+
+int fungsiNilaiLompat(char karakterKeypad)
+{
+  if (karakterKeypad == 'D') // perkalian nilai pangkat 10 (10^x)
+  {
+    penambahanNilai++;
+    if (penambahanNilai > 5)
+      penambahanNilai = 0;
+  }
+  if (karakterKeypad == '2')
+    nilaiLompat = nilaiLompat + pow(10, penambahanNilai);
+  if (karakterKeypad == '3')
+    nilaiLompat = nilaiLompat - pow(10, penambahanNilai);
+  return nilaiLompat;
 }
 
 void loop()
@@ -95,11 +114,11 @@ void loop()
       nilaiMenu = 1;
   }
 
-  if (key == 'D') // tombol menu ditekan. pergi ke menu
+  if (key == '4') // ubah mode relay
   {
-    penambahanNilai++;
-    if (penambahanNilai > 5)
-      penambahanNilai = 0;
+    modeRelay++;
+    if (modeRelay > 2)
+      modeRelay = 0;
   }
 
   if (key == '4')
@@ -148,15 +167,20 @@ void loop()
     {
       Serial.println("!");
       doneSend = true;
+      digitalWrite(relayPin, LOW); // matikan relay ketika run==false (mutlak)
     }
     else if (run == true)
     {
       Serial.print("$J=G21G91X");
       if (arah == false)
+      {
         Serial.print("-");
+        modeRelay == 2 ? digitalWrite(relayPin, HIGH) : digitalWrite(relayPin, LOW);
+      }
       Serial.print("400.00Y0.000Z0.000F");
       Serial.println(feedrate);
       doneSend = true;
+      digitalWrite(relayPin, HIGH);
     }
   }
 
@@ -193,7 +217,10 @@ void loop()
     else
       lcd.print("STOP");
     lcd.write(byte(3)); // sekat
-    lcd.write(byte(4));
+    lcd.print("Lpt");
+    lcd.write(byte(3)); // sekat
+    lcd.print("R");
+    lcd.print(modeRelay);
     lcd.print("               ");
     break;
   case 1:
@@ -205,12 +232,7 @@ void loop()
     lcd.print(" (x10^");
     lcd.print(penambahanNilai);
     lcd.print(")        ");
-    if (key == '2')
-    {
-      feedrate = feedrate + pow(10, penambahanNilai);
-    }
-    if (key == '3')
-      feedrate = feedrate - pow(10, penambahanNilai);
+    fungsiNilaiLompat(key);
     break;
   case 2:
     lcd.setCursor(0, 0);
@@ -222,14 +244,11 @@ void loop()
     lcd.print(penambahanNilai);
     lcd.print(")        ");
     lcd.print("                ");
-    if (key == '2')
-      akselerasi += pow(10, penambahanNilai);
-    if (key == '3')
-      akselerasi -= pow(10, penambahanNilai);
+    fungsiNilaiLompat(key);
     break;
   case 3:
     lcd.setCursor(0, 0);
-    lcd.print("Lompatan Sudut  ");
+    lcd.print("Besar Lompatan  ");
     lcd.setCursor(0, 1);
     lcd.print(" ");
     lcd.print(nilaiLompat);
@@ -237,10 +256,7 @@ void loop()
     lcd.print(penambahanNilai);
     lcd.print(")        ");
     lcd.print("                ");
-    if (key == '2')
-      nilaiLompat = nilaiLompat + pow(10, penambahanNilai);
-    if (key == '3')
-      nilaiLompat = nilaiLompat - pow(10, penambahanNilai);
+    fungsiNilaiLompat(key);
     break;
   case 4: // mode hold atau relase
     lcd.setCursor(0, 0);
